@@ -585,19 +585,42 @@ class SplitButton(QWidget):
 class FileListItem(QWidget):
     def __init__(self, file_path, show_size, remove_callback, parent=None):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(8)
-        def truncate_middle(text, max_length=40):
-            if len(text) <= max_length:
-                return text
-            part_length = (max_length - 3) // 2
-            return text[:part_length] + '...' + text[-part_length:]
+        self.file_path = file_path
+        self.remove_callback = remove_callback
+        
+        # 主布局
+        self.setLayout(QHBoxLayout())
+        self.layout().setContentsMargins(12, 8, 12, 8)
+        self.layout().setSpacing(12)
+        
+        # 文件图标和名称
+        icon_label = QLabel("📁" if os.path.isdir(file_path) else "📄")
+        icon_label.setStyleSheet("font-size: 16px;")
+        self.layout().addWidget(icon_label)
+        
+        # 文件名
         name = os.path.basename(file_path)
-        truncated_name = truncate_middle(name)
-        # 添加文件夹图标和大小显示
-        if os.path.isdir(file_path):
-            if show_size:
+        name_label = QLabel(name)
+        name_label.setStyleSheet("""
+            QLabel {
+                color: #2C3E50;
+                font-size: 13px;
+                font-weight: 500;
+            }
+        """)
+        name_label.setWordWrap(True)
+        self.layout().addWidget(name_label)
+        
+        # 文件大小
+        if show_size:
+            size_label = QLabel()
+            size_label.setStyleSheet("""
+                QLabel {
+                    color: #95A5A6;
+                    font-size: 12px;
+                }
+            """)
+            if os.path.isdir(file_path):
                 try:
                     total_size = 0
                     for dirpath, _, filenames in os.walk(file_path):
@@ -605,61 +628,63 @@ class FileListItem(QWidget):
                             fp = os.path.join(dirpath, f)
                             if os.path.exists(fp):
                                 total_size += os.path.getsize(fp)
-                    label = QLabel(f"📁 {truncated_name}  ({MainWindow.human_size_static(total_size)})")
+                    size_label.setText(MainWindow.human_size_static(total_size))
                 except Exception:
-                    label = QLabel(f"📁 {truncated_name}")
+                    size_label.setText("")
             else:
-                label = QLabel(f"📁 {truncated_name}")
-        else:
-            if show_size:
                 size = os.path.getsize(file_path)
-                label = QLabel(f"📄 {truncated_name}  ({MainWindow.human_size_static(size)})")
-            else:
-                label = QLabel(f"📄 {truncated_name}")
-        label.setStyleSheet("font-size:13px;color:#666;line-height:18px;")
-        label.setWordWrap(True)
-        layout.addWidget(label)
-        layout.addStretch(1)
-        self.status_btn = QPushButton("×")
-        self.status_btn.setCursor(Qt.PointingHandCursor)
-        self.status_btn.setFixedSize(20, 20)
-        self.status_btn.setStyleSheet('''
+                size_label.setText(MainWindow.human_size_static(size))
+            self.layout().addWidget(size_label)
+        
+        # 弹性空间
+        self.layout().addStretch()
+        
+        # 删除按钮
+        self.delete_btn = QPushButton("×")
+        self.delete_btn.setFixedSize(24, 24)
+        self.delete_btn.setCursor(Qt.PointingHandCursor)
+        self.delete_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
-                color: #999;
+                color: #95A5A6;
                 border: none;
-                font-size: 18px;
+                font-size: 20px;
                 font-weight: bold;
-                border-radius: 10px;
                 padding: 0px;
                 margin: 0px;
+                min-width: 24px;
+                min-height: 24px;
             }
             QPushButton:hover {
-                background: #F5F5F5;
-                color: #e74c3c;
+                color: #E74C3C;
             }
-        ''')
-        self.status_btn.clicked.connect(lambda: remove_callback(file_path))
-        layout.addWidget(self.status_btn)
-        self.setMinimumHeight(44)  # 增大最小高度，防止内容被裁剪
-        self.setLayout(layout)
+        """)
+        self.delete_btn.clicked.connect(lambda: self.remove_callback(self.file_path))
+        self.layout().addWidget(self.delete_btn)
+        
+        # 设置最小高度
+        self.setMinimumHeight(40)
+        
+        # 设置背景色
+        self.setStyleSheet("""
+            QWidget {
+                background: transparent;
+            }
+        """)
 
     def set_completed(self):
         """设置完成状态"""
-        self.status_btn.setText("✓")
-        self.status_btn.setStyleSheet('''
+        self.delete_btn.setText("✓")
+        self.delete_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
-                color: #2ecc71;
+                color: #2ECC71;
                 border: none;
                 font-size: 18px;
                 font-weight: bold;
-                border-radius: 10px;
-                padding: 0px;
-                margin: 0px;
             }
-        ''')
-        self.status_btn.setEnabled(False)
+        """)
+        self.delete_btn.setEnabled(False)
 
     def on_remove(self):
         if not self.is_completed:
@@ -797,11 +822,11 @@ class MainWindow(QMainWindow):
                     border-radius: 6px;
                 }
                 QListWidget::item:hover {
-                    background: #F5F6FA;
+                    background: transparent;
                 }
                 QListWidget::item:selected {
-                    background: #EBF5FB;
-                    color: #3498DB;
+                    background: transparent;
+                    color: #2C3E50;
                 }
                 QScrollArea {
                     border: none;
@@ -1196,9 +1221,6 @@ class MainWindow(QMainWindow):
             }}
         """)
         self.status_label.setText(msg)
-        
-        if status_type in ["error", "success"]:
-            QTimer.singleShot(3000, lambda: self.set_status("数据删除后无法恢复，请谨慎操作！", "warning"))
 
     def remove_file(self, file_path):
         if file_path in self.selected_files:
@@ -1224,7 +1246,7 @@ class MainWindow(QMainWindow):
         hint_item.setForeground(QColor("#b0b0b0"))
         hint_item.setTextAlignment(Qt.AlignCenter)
         self.file_list.addItem(hint_item)
-        self.set_status("数据删除后无法恢复，请谨慎操作！", "warning")
+        self.set_status("请添加需要粉碎的文件", "info")
 
     @staticmethod
     def human_size_static(size, decimal_places=2):
@@ -1269,6 +1291,8 @@ if __name__ == '__main__':
         app = QApplication(sys.argv)
         window = MainWindow()
         window.show()
+        # 在程序启动时显示一次警告
+        window.set_status("数据删除后将无法恢复，请谨慎操作！", "warning")
         sys.exit(app.exec())
     except Exception as e:
         log_exception(e)
